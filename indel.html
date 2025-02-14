@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Dependency Diagram</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .node circle, .node rect, .node polygon, .node ellipse { stroke-width: 2px; cursor: grab; transition: opacity 0.3s; }
+        .link { stroke: #999; stroke-opacity: 0.6; stroke-width: 2px; transition: opacity 0.3s; }
+        .node text { font-size: 12px; fill: black; pointer-events: none; transition: opacity 0.3s; }
+        .dim { opacity: 0.2 !important; }
+
+        /* Toolbar Styles */
+        .toolbar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0px 0px 5px rgba(0,0,0,0.3);
+        }
+        .toolbar label {
+            display: block;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <label>Link Distance: <span id="link-distance-value">150</span></label>
+        <input type="range" id="link-distance" min="50" max="300" value="150">
+        
+        <label>Charge Strength: <span id="charge-strength-value">-100</span></label>
+        <input type="range" id="charge-strength" min="-500" max="0" value="-100">
+        
+        <label>Alpha Decay: <span id="alpha-decay-value">0.02</span></label>
+        <input type="range" id="alpha-decay" min="0.005" max="0.1" step="0.005" value="0.02">
+    </div>
+
+    <svg width="1200" height="800">
+        <g id="zoom-container"></g>
+    </svg>
+
+    <script>
+        const width = 1200, height = 800;
+        const svg = d3.select("svg");
+        const zoomContainer = d3.select("#zoom-container");
+
+        const zoom = d3.zoom()
+            .scaleExtent([0.5, 3])
+            .on("zoom", (event) => zoomContainer.attr("transform", event.transform));
+
+        svg.call(zoom)
+            .call(zoom.transform, d3.zoomIdentity.translate(width / 4, height / 4)); // Adjust starting view
+
+        d3.json("data.json").then(data => {
+            const simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.links).id(d => d.id).distance(150))
+                .force("charge", d3.forceManyBody().strength(-100))
+                .force("center", d3.forceCenter(width / 4, height / 4)) // Adjust center
+                .alphaDecay(0.02)
+                .on("tick", ticked)
+//                .stop();
+
+            // Start the simulation automatically after setup
+            simulation.restart();
+
+            const link = zoomContainer.append("g")
+                .selectAll("line")
+                .data(data.links)
+                .enter().append("line")
+                .attr("class", "link");
+
+            const node = zoomContainer.append("g")
+                .selectAll("g")
+                .data(data.nodes)
+                .enter().append("g")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            
+
+
+
+            node.each(function(d) {
+                const g = d3.select(this);
+                const nodeSize = 15; // Small size for all shapes
+
+                if (d.shape === "circle") {
+                    g.append("circle")
+                        .attr("r", nodeSize)
+                        .attr("fill", d.color);
+                } else if (d.shape === "rect") {
+                    g.append("rect")
+                        .attr("width", nodeSize * 2)
+                        .attr("height", nodeSize * 2 / 1.5)
+                        .attr("x", -nodeSize)
+                        .attr("y", -nodeSize / 1.5)
+                        .attr("fill", d.color);
+                } else if (d.shape === "triangle") {
+                    const points = [
+                        [-nodeSize, nodeSize], 
+                        [nodeSize, nodeSize], 
+                        [0, -nodeSize]
+                    ];
+                    g.append("polygon")
+                        .attr("points", points.map(p => p.join(",")).join(" "))
+                        .attr("fill", d.color);
+                } else if (d.shape === "ellipse") {
+                    g.append("ellipse")
+                        .attr("cx", 0)
+                        .attr("cy", 0)
+                        .attr("rx", nodeSize * 1.2)
+                        .attr("ry", nodeSize * 0.8)
+                        .attr("fill", d.color);
+                } else if (d.shape === "diamond") {
+                    const points = [
+                        [0, -nodeSize],  
+                        [nodeSize, 0],    
+                        [0, nodeSize],    
+                        [-nodeSize, 0]    
+                    ];
+                    g.append("polygon")
+                        .attr("points", points.map(p => p.join(",")).join(" "))
+                        .attr("fill", d.color);
+                } else if (d.shape === "star") {
+                    const points = [];
+                    const outerRadius = nodeSize;
+                    const innerRadius = nodeSize / 2.5;
+                    for (let i = 0; i < 5; i++) {
+                        const angle = i * Math.PI * 2 / 5;
+                        const xOuter = Math.cos(angle) * outerRadius;
+                        const yOuter = Math.sin(angle) * outerRadius;
+                        points.push([xOuter, yOuter]);
+
+                        const angleInner = angle + Math.PI / 5;
+                        const xInner = Math.cos(angleInner) * innerRadius;
+                        const yInner = Math.sin(angleInner) * innerRadius;
+                        points.push([xInner, yInner]);
+                    }
+                    g.append("polygon")
+                        .attr("points", points.map(p => p.join(",")).join(" "))
+                        .attr("fill", d.color);
+                }
+
+                // Add the text **outside** the shape (above)
+                g.append("text")
+                    .attr("class", "node-text")
+                    .attr("font-size", "10px")
+                    .attr("fill", "black")
+                    .attr("text-anchor", "middle")
+                    .attr("dy", -nodeSize - 2) // Move text **above** the shape
+                    .text(d.id);
+            });
+
+
+
+
+
+
+
+
+
+
+
+//            node.append("text")
+//                .attr("x", 12)
+//                .attr("y", 3)
+//                .text(d => d.id);
+
+            function ticked() {
+                link.attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node.attr("transform", d => `translate(${d.x},${d.y})`);
+            }
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+
+            // Toolbar controls
+            document.getElementById("link-distance").addEventListener("input", function() {
+                const newValue = +this.value;
+                document.getElementById("link-distance-value").textContent = newValue;
+                simulation.force("link").distance(newValue);
+                simulation.alpha(1).restart();
+            });
+
+            document.getElementById("charge-strength").addEventListener("input", function() {
+                const newValue = +this.value;
+                document.getElementById("charge-strength-value").textContent = newValue;
+                simulation.force("charge").strength(newValue);
+                simulation.alpha(1).restart();
+            });
+
+            document.getElementById("alpha-decay").addEventListener("input", function() {
+                const newValue = +this.value;
+                document.getElementById("alpha-decay-value").textContent = newValue;
+                simulation.alphaDecay(newValue);
+                simulation.alpha(1).restart();
+            });
+
+        }).catch(error => console.error("Error loading data:", error));
+    </script>
+</body>
+</html>
