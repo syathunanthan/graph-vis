@@ -1,0 +1,14 @@
+{
+    "nodes": [
+        { "id": "1", "group": "web", "shape": "rect", "color": "#75b354" },
+        { "id": "2", "group": "web", "shape": "rect", "color": "#75b354" },
+        { "id": "3", "group": "platform", "shape": "diamond", "color": "#5e6061" },
+        { "id": "4", "group": "system", "shape": "ellipse", "color": "#ff5733" }
+    ],
+    "links": [
+        { "source": "1", "target": "2" },
+        { "source": "1", "target": "3" },
+        { "source": "2", "target": "4" }
+    ]
+}
+
