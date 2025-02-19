@@ -27,6 +27,21 @@
             font-size: 12px;
             margin-top: 5px;
         }
+
+        .dim {
+            opacity: 0.2 !important;  /* Reduce opacity for non-connected elements */
+        }
+
+        .node.selected {
+            stroke: #ff5722; /* Highlight color for selected node */
+            stroke-width: 3px;
+        }
+
+        .link.selected {
+            stroke: #ff5722; /* Highlight color for selected link */
+            stroke-width: 3px;
+        }
+
     </style>
 </head>
 <body>
@@ -42,6 +57,11 @@
     </div>
 
     <svg width="1200" height="800">
+        <defs>
+            <marker id="arrowhead" viewBox="0 0 10 10" refX="27" refY="5" orient="auto" markerWidth="4" markerHeight="4" fill="#999">
+                <path d="M 0 0 L 10 5 L 0 10 z"/>
+            </marker>
+        </defs>
         <g id="zoom-container"></g>
     </svg>
 
@@ -54,26 +74,64 @@
             .scaleExtent([0.5, 3])
             .on("zoom", (event) => zoomContainer.attr("transform", event.transform));
 
-        svg.call(zoom)
-            .call(zoom.transform, d3.zoomIdentity.translate(width / 4, height / 4)); // Adjust starting view
+        
+
 
         d3.json("data.json").then(data => {
             const simulation = d3.forceSimulation(data.nodes)
-                .force("link", d3.forceLink(data.links).id(d => d.id).distance(150))
+                .force("link", d3.forceLink(data.links).id(d => d.id).distance(160))  // Increased distance
                 .force("charge", d3.forceManyBody().strength(-100))
                 .force("center", d3.forceCenter(width / 4, height / 4)) // Adjust center
                 .alphaDecay(0.02)
                 .on("tick", ticked)
+                .restart();
 //                .stop();
 
             // Start the simulation automatically after setup
             simulation.restart();
 
+            function showTooltip(event, d) {
+                // Create a tooltip div if it doesn't exist
+                let tooltip = d3.select("body").select(".tooltip");
+                if (tooltip.empty()) {
+                    tooltip = d3.select("body")
+                        .append("div")
+                        .attr("class", "tooltip")
+                        .style("position", "absolute")
+                        .style("background", "#fff")
+                        .style("padding", "5px")
+                        .style("border", "1px solid #ccc")
+                        .style("border-radius", "3px")
+                        .style("box-shadow", "0px 0px 5px rgba(0,0,0,0.3)")
+                        .style("pointer-events", "none") // So it doesn't interfere with mouse events
+                        .style("opacity", 0);
+                }
+
+                // Set tooltip text and position
+                tooltip.html(`<strong>${d.id}</strong>`)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 20) + "px")
+                    .transition()
+                    .duration(200)
+                    .style("opacity", 1);
+            }
+
+            function hideTooltip() {
+                d3.select(".tooltip")
+                    .transition()
+                    .duration(200)
+                    .style("opacity", 0)
+                    .remove(); // Remove tooltip when not needed
+            }
+
+
             const link = zoomContainer.append("g")
                 .selectAll("line")
                 .data(data.links)
                 .enter().append("line")
-                .attr("class", "link");
+                .attr("class", "link")
+                .attr("marker-end", "url(#arrowhead)"); // Attach the arrowhead marker to the end of the link
+
 
             const node = zoomContainer.append("g")
                 .selectAll("g")
@@ -82,7 +140,10 @@
                 .call(d3.drag()
                     .on("start", dragstarted)
                     .on("drag", dragged)
-                    .on("end", dragended));
+                    .on("end", dragended))
+                .on("click", selectNode)  // Add this line to trigger selection on click
+                .on("mouseover", showTooltip)
+                .on("mouseout", hideTooltip);
 
             
 
@@ -199,6 +260,37 @@
                 d.fx = null;
                 d.fy = null;
             }
+
+            function selectNode(event, selectedNode) {
+                event.stopPropagation(); // Prevent event from bubbling to SVG click event
+
+                // Set of connected nodes including the selected one
+                const connectedNodes = new Set([selectedNode.id]);
+
+                // Find all links connected to the selected node
+                data.links.forEach(link => {
+                    if (link.source.id === selectedNode.id) connectedNodes.add(link.target.id);
+                    if (link.target.id === selectedNode.id) connectedNodes.add(link.source.id);
+                });
+
+                // Highlight only the connected nodes and links
+                node.classed("dim", d => !connectedNodes.has(d.id));
+                link.classed("dim", d => !(d.source.id === selectedNode.id || d.target.id === selectedNode.id));
+            }
+
+            function deselectAll(event) {
+                if (event.target.tagName === "svg") {
+                    // Remove the "dim" class from all nodes and links to reset everything
+                    node.classed("dim", false);
+                    link.classed("dim", false);
+                }
+            }
+
+            svg.call(zoom)
+            .call(zoom.transform, d3.zoomIdentity.translate(width / 4, height / 4)); // Adjust starting view
+
+            svg.on("click", deselectAll);
+
 
             // Toolbar controls
             document.getElementById("link-distance").addEventListener("input", function() {
