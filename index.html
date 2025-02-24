@@ -54,6 +54,15 @@
         
         <label>Alpha Decay: <span id="alpha-decay-value">0.02</span></label>
         <input type="range" id="alpha-decay" min="0.005" max="0.1" step="0.005" value="0.02">
+
+        <label>Cluster by:</label>
+        <select id="cluster-select">
+            <option value="">None</option>
+            <option value="group">Group</option>
+            <option value="type">Type</option>
+            <option value="category">Category</option>
+        </select>
+        <button id="reset-btn">Reset Layout</button>
     </div>
 
     <svg width="1200" height="800">
@@ -74,14 +83,11 @@
             .scaleExtent([0.5, 3])
             .on("zoom", (event) => zoomContainer.attr("transform", event.transform));
 
-        
-
-
         d3.json("data.json").then(data => {
             const simulation = d3.forceSimulation(data.nodes)
-                .force("link", d3.forceLink(data.links).id(d => d.id).distance(160))  // Increased distance
-                .force("charge", d3.forceManyBody().strength(-100))
-                .force("center", d3.forceCenter(width / 4, height / 4)) // Adjust center
+                .force("link", d3.forceLink(data.links).id(d => d.id).distance(100))  // Increased distance
+                .force("charge", d3.forceManyBody().strength(-50))
+                .force("center", d3.forceCenter(width / 2, height / 2)) // Adjust center
                 .alphaDecay(0.02)
                 .on("tick", ticked)
                 .restart();
@@ -314,7 +320,61 @@
                 simulation.alpha(1).restart();
             });
 
+            let isClustered = false;
+
+            function applyForces(parameter) {
+                if (!parameter) {
+                    // Reset to default forces
+                    simulation.force("x", null);
+                    simulation.force("y", null);
+                } else {
+                    console.log("Clustering nodes by:", parameter);
+
+                    let clusterCenters = {};
+                    let uniqueValues = [...new Set(data.nodes.map(d => d[parameter]))]; // Extract unique parameter values
+
+                    // Assign X positions for each cluster category
+                    uniqueValues.forEach((val, index) => {
+                        clusterCenters[val] = (index + 1) * (width / (uniqueValues.length + 1)); 
+                    });
+
+                    simulation.force("x", d3.forceX(d => clusterCenters[d[parameter]]).strength(0.5))
+                            .force("y", d3.forceY(height / 2).strength(0.2));
+                }
+
+                simulation.alpha(1).restart();
+            }
+
+
+
+            document.getElementById("cluster-select").addEventListener("change", function() {
+                const selectedParam = this.value;
+                applyForces(selectedParam || null);
+            });
+
+
+            document.addEventListener("DOMContentLoaded", function() {
+                const clusterSelect = document.getElementById("cluster-select");
+                if (clusterSelect) {
+                    clusterSelect.addEventListener("change", function() {
+                        const selectedParam = this.value;
+                        applyForces(selectedParam);
+                    });
+                } else {
+                    console.error("Error: Cluster select dropdown not found in the DOM.");
+                }
+            });
+
+            document.getElementById("reset-btn").addEventListener("click", function() {
+                document.getElementById("cluster-select").value = ""; // Reset dropdown
+                applyForces(); // Reset forces
+            });
+
         }).catch(error => console.error("Error loading data:", error));
+
+
+
+
     </script>
 </body>
 </html>
